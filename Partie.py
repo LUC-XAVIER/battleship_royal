@@ -1,6 +1,6 @@
 #from corrige import *
 import TP5
-import CLI
+import GUI
 import os
 import json
 
@@ -32,17 +32,21 @@ def Generer_Bateaux():
     return liste_bateaux
         
 
-def Generer_Joueur(humain):
+def Generer_Joueur(humain, nombre_d_adversaires=1):
     '''
         Génère les informations de jeu d'un joueur
-        Entrée : booléen qui spécifie si l'on crée le joueur humain ou l'ordi
-        Sortie : un dictionnaire
+        Entrée : 
+            - humain : booléen qui spécifie si l'on crée le joueur humain ou l'ordi
+            - nombre_d_adversaires : nombre d'adversaires (grilles de tir)
+        Sortie : un dictionnaire avec grille de placement, bateaux, grilles de tir pour chaque adversaire, score
     '''
     batx = Generer_Bateaux()
+    # Create list of shooting grids, one for each opponent
+    grilles_tirs = [Generer_Grille(10) for _ in range(nombre_d_adversaires)]
     return {
         "grille": TP5.Placer_Bateaux(Generer_Grille(10), batx, humain), 
         "bateaux" : batx, 
-        "tirs": Generer_Grille(10), 
+        "tirs": grilles_tirs, 
         "score": 0
     }
 
@@ -65,7 +69,7 @@ def Chargement():
         fichier = open("sauvegarde.json", "r")
         data = json.load(fichier)
         fichier.close()
-        CLI.Afficher_msg("Une ancienne partie à été téléchargée")
+        GUI.Afficher_msg("Une ancienne partie à été téléchargée")
     
     elif not os.path.exists(chemin + "/data/sauvegarde.json"): 
         dico_joueur = Generer_Joueur(True)

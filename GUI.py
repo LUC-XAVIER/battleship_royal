@@ -1,0 +1,623 @@
+import sys
+import random
+import string
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
+                             QPushButton, QLabel, QSpinBox, QStackedWidget, QListWidget, 
+                             QLineEdit, QListWidgetItem, QDialog, QRadioButton, QButtonGroup)
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPalette, QColor
+
+import Partie
+import TP5
+import corrige
+
+
+class GridCell(QPushButton):
+    def __init__(self, row, col, parent=None):
+        super().__init__(parent)
+        self.row = row
+        self.col = col
+        self.state = 'water'
+        self.ship_index = None  # Track which ship occupies this cell
+        self.setFixedSize(40, 40)
+        self.update_style()
+    
+    def update_style(self):
+        styles = {
+            'water': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0d47a1, stop:1 #1565c0); border: 1px solid #1976d2; border-radius: 6px; color: white;',
+            'ship': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2e7d32, stop:1 #43a047); border: 1px solid #4caf50; border-radius: 6px; color: white; font-weight: bold;',
+            'hit': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #c62828, stop:1 #e53935); border: 1px solid #f44336; border-radius: 6px; color: white;',
+            'miss': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #455a64, stop:1 #607d8b); border: 1px solid #78909c; border-radius: 6px; color: white;'
+        }
+        self.setStyleSheet(styles[self.state])
+
+
+class Grid(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.cells = {}
+        self.init_grid()
+    
+    def init_grid(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(1)
+        layout.setContentsMargins(10, 10, 10, 10)
+        
+        for row in range(10):
+            row_layout = QHBoxLayout()
+            row_layout.setSpacing(6)
+            
+            for col in range(10):
+                cell = GridCell(row, col)
+                self.cells[(row, col)] = cell
+                row_layout.addWidget(cell)
+            
+            layout.addLayout(row_layout)
+        
+        self.setLayout(layout)
+        self.setStyleSheet('background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1a237e, stop:1 #283593); border: 2px solid #3949ab; border-radius: 8px;')
+
+
+class OrientationDialog(QDialog):
+    """Modal dialog for selecting ship orientation"""
+    def __init__(self, ship_name, possible_orientations, parent=None):
+        super().__init__(parent)
+        self.selected_orientation = None
+        self.orientation_names = {
+            'N': '⬆ North (Up)',
+            'S': '⬇ South (Down)',
+            'E': '➡ East (Right)',
+            'O': '⬅ Ouest (Left)'
+        }
+        self.init_ui(ship_name, possible_orientations)
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        
+    def init_ui(self, ship_name, possible_orientations):
+        self.setWindowTitle('Choose Orientation')
+        self.setStyleSheet('background: #1e1e2e; color: white; border: 2px solid #3949ab;')
+        layout = QVBoxLayout()
+        layout.setSpacing(20)
+        
+        title = QLabel(f'Select orientation for {ship_name}')
+        title.setStyleSheet('color: white; font-size: 16px; font-weight: 600;')
+        layout.addWidget(title)
+        
+        # Radio buttons for orientations
+        button_group = QButtonGroup(self)
+        for i, orient in enumerate(possible_orientations):
+            radio = QRadioButton(self.orientation_names.get(orient, orient))
+            # Style radio button with white text when selected
+            radio.setStyleSheet("""
+                QRadioButton {
+                    color: #888888;
+                    font-size: 14px;
+                    padding: 6px;
+                }
+                QRadioButton:checked {
+                    color: white;
+                    font-weight: bold;
+                }
+                QRadioButton::indicator {
+                    width: 18px;
+                    height: 18px;
+                }
+                QRadioButton::indicator:checked {
+                    background: #4caf50;
+                }
+            """)
+            radio.toggled.connect(lambda checked, o=orient: self.on_orientation_selected(o, checked))
+            button_group.addButton(radio, i)
+            layout.addWidget(radio)
+            if i == 0:
+                radio.setChecked(True)
+        
+        # Confirm button
+        confirm_btn = QPushButton('Confirm Placement')
+        confirm_btn.setFixedHeight(44)
+        confirm_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4caf50, stop:1 #66bb6a);
+                border: 1px solid #66bb6a;
+                border-radius: 12px;
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #66bb6a, stop:1 #81c784);
+            }
+        """)
+        confirm_btn.clicked.connect(self.accept)
+        layout.addWidget(confirm_btn)
+        
+        self.setLayout(layout)
+        self.setFixedWidth(300)
+        
+    def on_orientation_selected(self, orientation, checked):
+        if checked:
+            self.selected_orientation = orientation
+    
+    def get_orientation(self):
+        return self.selected_orientation
+
+
+class BattleshipGame(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+    
+    def init_ui(self):
+        self.setWindowTitle('Battleship')
+        #self.setGeometry(100, 100, 1200, 700)
+        self.showMaximized()
+        palette = QPalette()
+        palette.setColor(QPalette.ColorRole.Window, QColor(15, 20, 30))
+        self.setPalette(palette)
+
+        self.stack = QStackedWidget()
+        self.setCentralWidget(self.stack)
+
+        self.welcome_page = self.build_welcome_page()
+        self.room_options_page = self.build_room_options_page()
+        self.create_room_page = self.build_create_room_page()
+        self.join_room_page = self.build_join_room_page()
+        self.placement_page = self.build_placement_page()
+        self.game_page = self.build_game_page()
+
+        self.stack.addWidget(self.welcome_page)
+        self.stack.addWidget(self.room_options_page)
+        self.stack.addWidget(self.create_room_page)
+        self.stack.addWidget(self.join_room_page)
+        self.stack.addWidget(self.placement_page)
+        self.stack.addWidget(self.game_page)
+
+        self.stack.setCurrentWidget(self.welcome_page)
+        
+    def create_button(self, text, handler=None):
+        btn = QPushButton(text)
+        btn.setFixedHeight(44)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2196f3, stop:1 #42a5f5);
+                border: 1px solid #64b5f6;
+                border-radius: 12px;
+                color: white;
+                font-size: 15px;
+                padding: 8px 18px;
+                letter-spacing: 0.5px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #42a5f5, stop:1 #64b5f6);
+            }
+            QPushButton:pressed {
+                background: #1e88e5;
+            }
+        """)
+        if handler:
+            btn.clicked.connect(handler)
+        return btn
+
+    def build_welcome_page(self):
+        page = QWidget()
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(20)
+        title = QLabel('Welcome to Battleship')
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet('color: white; font-size: 28px; font-weight: 700; letter-spacing: 1px;')
+        subtitle = QLabel('Pick your battle mode to begin')
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle.setStyleSheet('color: #b0bec5; font-size: 16px;')
+
+        buttons_layout = QVBoxLayout()
+        buttons_layout.setSpacing(14)
+        btn_ai = self.create_button('P Vs AI', self.start_ai)
+        btn_pvp = self.create_button('P Vs P', lambda: self.go_room_options('pvp'))
+        btn_br = self.create_button('Battle Royale', lambda: self.go_room_options('br'))
+        buttons_layout.addWidget(btn_ai)
+        buttons_layout.addWidget(btn_pvp)
+        buttons_layout.addWidget(btn_br)
+
+        layout.addWidget(title)
+        layout.addWidget(subtitle)
+        layout.addLayout(buttons_layout)
+        page.setLayout(layout)
+        return page
+
+    def build_room_options_page(self):
+        page = QWidget()
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(18)
+        label = QLabel('Multiplayer Lobby')
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setStyleSheet('color: white; font-size: 24px; font-weight: 600; letter-spacing: 0.6px;')
+        btn_join = self.create_button('Join Room', self.open_join_room)
+        btn_create = self.create_button('Create Room', self.open_create_room)
+        btn_back = self.create_button('Back', lambda: self.stack.setCurrentWidget(self.welcome_page))
+        layout.addWidget(label)
+        layout.addWidget(btn_join)
+        layout.addWidget(btn_create)
+        layout.addWidget(btn_back)
+        page.setLayout(layout)
+        return page
+
+    def build_create_room_page(self):
+        page = QWidget()
+        layout = QVBoxLayout()
+        layout.setSpacing(16)
+        layout.setContentsMargins(40, 40, 40, 40)
+
+        label = QLabel('Host Room')
+        label.setStyleSheet('color: white; font-size: 22px; font-weight: 600;')
+
+        self.room_code_label = QLabel()
+        self.room_code_label.setStyleSheet('color: #90caf9; font-size: 20px; font-weight: 700;')
+
+        self.host_player_list = QListWidget()
+        self.host_player_list.setStyleSheet('background: #0e1623; color: white; border: 1px solid #1e2a3a; border-radius: 8px; padding: 6px;')
+        self.host_player_list.setFixedHeight(180)
+
+        self.host_count_label = QLabel('Players joined: 0')
+        self.host_count_label.setStyleSheet('color: #cfd8dc; font-size: 14px;')
+
+        begin_btn = self.create_button('Begin', self.start_game_from_host)
+        back_btn = self.create_button('Back', lambda: self.stack.setCurrentWidget(self.room_options_page))
+
+        layout.addWidget(label)
+        layout.addWidget(self.room_code_label)
+        layout.addWidget(self.host_count_label)
+        layout.addWidget(self.host_player_list)
+        layout.addWidget(begin_btn)
+        layout.addWidget(back_btn)
+        layout.addStretch()
+        page.setLayout(layout)
+        return page
+
+    def build_join_room_page(self):
+        page = QWidget()
+        layout = QVBoxLayout()
+        layout.setSpacing(16)
+        layout.setContentsMargins(40, 40, 40, 40)
+
+        label = QLabel('Join a Room')
+        label.setStyleSheet('color: white; font-size: 22px; font-weight: 600;')
+
+        self.available_rooms = QListWidget()
+        self.available_rooms.setStyleSheet('background: #0e1623; color: white; border: 1px solid #1e2a3a; border-radius: 8px; padding: 6px;')
+        self.available_rooms.setFixedHeight(180)
+
+        manual_label = QLabel('Enter code or IP:')
+        manual_label.setStyleSheet('color: #cfd8dc; font-size: 14px;')
+        self.manual_code = QLineEdit()
+        self.manual_code.setPlaceholderText('Enter code or IP provided by host')
+        self.manual_code.setStyleSheet('background: #0e1623; color: white; border: 1px solid #1e2a3a; border-radius: 8px; padding: 10px;')
+
+        join_btn = self.create_button('Join', self.join_selected_room)
+        back_btn = self.create_button('Back', lambda: self.stack.setCurrentWidget(self.room_options_page))
+
+        layout.addWidget(label)
+        layout.addWidget(self.available_rooms)
+        layout.addWidget(manual_label)
+        layout.addWidget(self.manual_code)
+        layout.addWidget(join_btn)
+        layout.addWidget(back_btn)
+        layout.addStretch()
+        page.setLayout(layout)
+        return page
+
+    def build_game_page(self):
+        page = QWidget()
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(30)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(10)
+        opponents_label = QLabel('Opponents:')
+        opponents_label.setStyleSheet('color: white; font-size: 14px;')
+        self.opponent_count = QSpinBox()
+        self.opponent_count.setMinimum(1)
+        self.opponent_count.setMaximum(12)
+        self.opponent_count.setValue(3)
+        self.opponent_count.valueChanged.connect(self.rebuild_opponent_grids)
+        controls_layout.addWidget(opponents_label)
+        controls_layout.addWidget(self.opponent_count)
+        controls_layout.addStretch()
+
+        self.opponents_layout = QHBoxLayout()
+        self.opponents_layout.setSpacing(30)
+
+        self.opponent_grids = []
+        self.rebuild_opponent_grids(self.opponent_count.value())
+
+        self.player_grid = Grid()
+        self.shoot_all_button = self.create_button('Shoot All', self.shoot_all_grids)
+        self.shoot_all_button.setFixedWidth(140)
+
+        player_layout = QHBoxLayout()
+        player_layout.setSpacing(10)
+        player_layout.addWidget(self.player_grid, alignment=Qt.AlignmentFlag.AlignCenter)
+        player_layout.addWidget(self.shoot_all_button)
+
+        main_layout.addLayout(controls_layout)
+        main_layout.addLayout(self.opponents_layout)
+        main_layout.addLayout(player_layout)
+
+        page.setLayout(main_layout)
+        return page
+
+    def build_placement_page(self):
+        page = QWidget()
+        layout = QVBoxLayout()
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        # Title
+        title = QLabel('Place Your Ships')
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet('color: white; font-size: 24px; font-weight: 700;')
+        
+        # Current ship info section
+        ship_info_layout = QHBoxLayout()
+        ship_info_layout.setSpacing(20)
+        
+        # Ship name and details
+        self.current_ship_label = QLabel('Current Ship: [None]')
+        self.current_ship_label.setStyleSheet('color: #90caf9; font-size: 16px; font-weight: 600;')
+        
+        # Ship visual representation
+        self.ship_visual = QLabel()
+        self.ship_visual.setStyleSheet('background: transparent; color: #4caf50; font-size: 24px; font-family: monospace;')
+        self.ship_visual.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.ship_visual.setMinimumWidth(200)
+        
+        ship_info_layout.addWidget(self.current_ship_label)
+        ship_info_layout.addWidget(self.ship_visual)
+        ship_info_layout.addStretch()
+        
+        # Instructions
+        instructions = QLabel('Click on a grid cell to select position, then choose orientation')
+        instructions.setStyleSheet('color: #cfd8dc; font-size: 13px;')
+        
+        # Grid
+        self.placement_grid = Grid()
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        back_btn = self.create_button('Back', self.cancel_placement)
+        btn_layout.addStretch()
+        btn_layout.addWidget(back_btn)
+        
+        layout.addWidget(title)
+        layout.addLayout(ship_info_layout)
+        layout.addWidget(instructions)
+        layout.addWidget(self.placement_grid, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addLayout(btn_layout)
+        
+        page.setLayout(layout)
+        
+        # State for placement
+        self.placement_model_grid = None
+        self.ships_list = None
+        self.current_ship_index = 0
+        self.player_data = None
+        
+        return page
+
+    def start_ai(self):
+        self.init_placement()
+        self.previous_page = self.welcome_page
+        self.stack.setCurrentWidget(self.placement_page)
+
+    def go_room_options(self, mode):
+        self.current_mode = mode
+        self.stack.setCurrentWidget(self.room_options_page)
+
+    def open_create_room(self):
+        self.room_code = ''.join(random.choices('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', k=6))
+        self.room_code_label.setText(f'Room code: {self.room_code}')
+        self.host_player_list.clear()
+        for name in ['Host']:  
+            self.host_player_list.addItem(QListWidgetItem(name))
+        self.host_count_label.setText(f'Players joined: {self.host_player_list.count()}')
+        self.stack.setCurrentWidget(self.create_room_page)
+
+    def open_join_room(self):
+        self.available_rooms.clear()
+        sample_rooms = ['AX93QZ', 'BR5562', 'NAVY12', 'SEA7IP']
+        for code in sample_rooms:
+            self.available_rooms.addItem(QListWidgetItem(f'Room {code}'))
+        self.stack.setCurrentWidget(self.join_room_page)
+
+    def start_game_from_host(self):
+        self.init_placement()
+        self.previous_page = self.create_room_page
+        self.stack.setCurrentWidget(self.placement_page)
+
+    def join_selected_room(self):
+        selected = self.available_rooms.currentItem()
+        code = self.manual_code.text().strip()
+        if selected and not code:
+            code = selected.text().split()[-1]
+        if not code:
+            if self.available_rooms.count() > 0:
+                code = self.available_rooms.item(0).text().split()[-1]
+        self.joined_room_code = code
+        self.init_placement()
+        self.previous_page = self.join_room_page
+        self.stack.setCurrentWidget(self.placement_page)
+
+    def rebuild_opponent_grids(self, count):
+        for grid in self.opponent_grids:
+            self.opponents_layout.removeWidget(grid)
+            grid.setParent(None)
+        self.opponent_grids = []
+        for _ in range(count):
+            grid = Grid()
+            self.opponent_grids.append(grid)
+            self.opponents_layout.addWidget(grid)
+
+    def shoot_all_grids(self):
+        pass
+
+    # ---- Ship Placement Methods ----
+    def init_placement(self):
+        """Initialize placement using data from Generer_Joueur()"""
+        # Determine number of opponents based on game mode
+        num_opponents = 1  # Default for AI
+        if hasattr(self, 'opponent_count'):
+            num_opponents = self.opponent_count.value()
+        
+        # Create empty grids - we'll use GUI-based placement instead of Placer_Bateaux
+        # which expects console input
+        empty_grid = Partie.Generer_Grille(10)
+        ships_list = Partie.Generer_Bateaux()
+        grilles_tirs = [Partie.Generer_Grille(10) for _ in range(num_opponents)]
+        
+        # Store player data structure
+        self.player_data = {
+            "grille": empty_grid,  # Will be filled by GUI placement
+            "bateaux": ships_list,
+            "tirs": grilles_tirs,
+            "score": 0
+        }
+        
+        self.placement_model_grid = self.player_data["grille"]
+        self.ships_list = self.player_data["bateaux"]
+        self.current_ship_index = 0
+        self.placed_ships = []
+        
+        # Reset grid UI
+        for cell in self.placement_grid.cells.values():
+            cell.state = 'water'
+            cell.ship_index = None
+            cell.update_style()
+            # Clear previous connections
+            try:
+                cell.clicked.disconnect()
+            except TypeError:
+                pass
+        
+        # Connect cell clicks
+        for cell in self.placement_grid.cells.values():
+            cell.clicked.connect(lambda checked=False, c=cell: self.on_cell_clicked(c))
+        
+        # Show first ship info
+        self.update_ship_display()
+
+    def update_ship_display(self):
+        """Update the display of the current ship being placed"""
+        if self.current_ship_index < len(self.ships_list):
+            ship = self.ships_list[self.current_ship_index]
+            ship_name = ship['nom']
+            ship_size = ship['taille']
+            
+            # Update ship name label
+            self.current_ship_label.setText(f'Current Ship: {ship_name.upper()} ({ship_size} cells)')
+            
+            # Create visual representation of ship
+            ship_visual = ' '.join(['■'] * ship_size)
+            self.ship_visual.setText(ship_visual)
+        else:
+            # All ships placed
+            self.current_ship_label.setText('All Ships Placed!')
+            self.ship_visual.setText('✓')
+
+    def on_cell_clicked(self, cell):
+        """Handle cell click during ship placement"""
+        if self.current_ship_index >= len(self.ships_list):
+            # All ships placed, go to game
+            self.finish_placement()
+            return
+        
+        ship = self.ships_list[self.current_ship_index]
+        row, col = cell.row, cell.col
+        
+        # Convert row/col to coordinates like "B6"
+        coords = chr(row + 65) + str(col + 1)
+        
+        # Check possible orientations for this position using TP5.Verif_Placement
+        possible_orientations = TP5.Verif_Placement(
+            self.placement_model_grid,
+            coords, 
+            ship['taille']
+        )
+        
+        if not possible_orientations:
+            # No valid placement here
+            print(f"Cannot place {ship['nom']} at {coords}")
+            return
+        
+        # Show orientation selection dialog
+        dialog = OrientationDialog(ship['nom'], possible_orientations, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            orientation = dialog.get_orientation()
+            if orientation:
+                self.place_ship(coords, orientation, self.current_ship_index)
+
+    def place_ship(self, coords, orientation, ship_index):
+        """Place ship on grid and update state"""
+        ship = self.ships_list[ship_index]
+        
+        # Place on model grid
+        self.placement_model_grid = TP5.Placer_Bateau(
+            self.placement_model_grid,
+            ship_index,
+            coords,
+            orientation,
+            ship['taille']
+        )
+        
+        # Update UI grid to show ship
+        for r in range(10):
+            for c in range(10):
+                if self.placement_model_grid[r][c] == ship_index + 2:
+                    self.placement_grid.cells[(r, c)].state = 'ship'
+                    self.placement_grid.cells[(r, c)].ship_index = ship_index
+                    self.placement_grid.cells[(r, c)].update_style()
+        
+        self.placed_ships.append({
+            'index': ship_index,
+            'name': ship['nom'],
+            'coords': coords,
+            'orientation': orientation
+        })
+        
+        # Move to next ship
+        self.current_ship_index += 1
+        self.update_ship_display()
+        
+        # Check if all ships placed
+        if self.current_ship_index >= len(self.ships_list):
+            self.finish_placement()
+
+    def finish_placement(self):
+        """All ships placed, proceed to game"""
+        # Update player grid in game page
+        for r in range(10):
+            for c in range(10):
+                v = self.placement_model_grid[r][c]
+                if v >= 2:
+                    self.player_grid.cells[(r, c)].state = 'ship'
+                    self.player_grid.cells[(r, c)].update_style()
+        
+        self.stack.setCurrentWidget(self.game_page)
+
+    def cancel_placement(self):
+        """Cancel placement and return to previous page"""
+        prev = getattr(self, 'previous_page', self.welcome_page)
+        self.stack.setCurrentWidget(prev)
+
+
+def main():
+    app = QApplication(sys.argv)
+    window = BattleshipGame()
+    #window.show()
+    window.showMaximized()
+    sys.exit(app.exec())
+
+
+if __name__ == '__main__':
+    main()

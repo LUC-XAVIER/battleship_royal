@@ -2,7 +2,7 @@ import BNlib
 import Partie
 import corrige
 import TP5
-import CLI
+import GUI
 import time
 import struct 
 import threading
@@ -66,53 +66,53 @@ def Boucle_Jeu():
         tir = tir_ordi = 1
         while (tir == 1 or tir == 2):    #rejouer si jamais vous touchez ou coulez un bateau
 
-            corrige.Afficher_Grille(data[0]["tirs"])
-            pos = CLI.Saisie_Coords()
+            GUI.Afficher_Grille(data[0]["tirs"])
+            pos = GUI.Saisie_Coords()
     
             if pos == "Q" or pos == "q":
                 Partie.Sauvegarde(data[0], data[1])
                 return -1
             
             tir = corrige.Tir(data[1]["grille"], data[0]["tirs"], pos, data[1]["bateaux"])
-            #corrige.Afficher_Grille(data[0]["tirs"])
+            #GUI.Afficher_Grille(data[0]["tirs"])
             
             if BNlib.Gagne(data[1]["bateaux"]):
-                corrige.Afficher_Grille(data[0]["tirs"])
+                GUI.Afficher_Grille(data[0]["tirs"])
                 return 1
             
-        corrige.Afficher_Grille(data[0]["tirs"])
+        GUI.Afficher_Grille(data[0]["tirs"])
 
         if BNlib.Gagne(data[1]["bateaux"]):
             return 1
         
         while (tir_ordi == 1 or tir_ordi == 2):
-            CLI.Afficher_msg("computer plays...")
+            GUI.Afficher_msg("computer plays...")
             
             if BNlib.Gagne(data[0]["bateaux"]):
-                corrige.Afficher_Grille(data[1]["tirs"])
+                GUI.Afficher_Grille(data[1]["tirs"])
                 return 0
             
             pos_ordi = TP5.Ordi_Coords(data[1]["tirs"], data[0]["bateaux"])
             tir_ordi = corrige.Tir(data[0]["grille"], data[1]["tirs"], pos_ordi, data[0]["bateaux"])
-            corrige.Afficher_Grille(data[1]["tirs"])     
+            GUI.Afficher_Grille(data[1]["tirs"])     
 
     return 0
 
 def run_listener():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
-        s.connect((host, port))
-        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
-        s.settimeout(1)
-        sckt = s
-        log.info('connected ', sckt)
+   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+       s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
+       s.connect((host, port))
+       s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
+       s.settimeout(1)
+       sckt = s
+       log.info('connected ', sckt)
         
 
 
 if __name__ == "__main__":
     
-    client_thread = threading.Thread(target = run_listener)
-    client_thread.start()
+    GUIent_thread = threading.Thread(target = run_listener)
+    GUIent_thread.start()
     
     verdict = Boucle_Jeu()
     if verdict == 0:

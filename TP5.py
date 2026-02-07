@@ -1,6 +1,6 @@
 import corrige
-import CLI
-import BNlib
+import GUI
+#import BNlib
 import Partie
 from random import randint
 
@@ -87,22 +87,22 @@ def Placer_Bateaux(grille, bateaux, humain):
     Positionne l'ensemble des bateaux sur une grille (de façon auto si ce n'est pas l'humain)
     '''
     if humain:
-        corrige.Afficher_Grille(grille)
+        GUI.Afficher_Grille(grille)
     for num in range(len(bateaux)):
         if humain:
-            CLI.Afficher_msg("Placement de : "+bateaux[num]['nom'])
+            GUI.Afficher_msg("Placement de : "+bateaux[num]['nom'])
         directions = ""
         while len(directions)==0: # Tant qu'il n'est pas possible de placer un bateau sur la case choisie :
-            coords = CLI.Saisie_Coords() if humain else chr(randint(65, 74))+str(randint(1, 10))
+            coords = GUI.Saisie_Coords() if humain else chr(randint(65, 74))+str(randint(1, 10))
             if coords.upper() == 'Q':
                 quit()
             directions = Verif_Placement(grille, coords, bateaux[num]['taille'])
             if humain and len(directions)==0:
-                CLI.Afficher_msg("Impossible de placer le "+bateaux[num]['nom']+" ici.")
-        orientation = CLI.Saisie_Car("Saisir une orientation", directions) if humain else directions[randint(1, len(directions))-1]
+                GUI.Afficher_msg("Impossible de placer le "+bateaux[num]['nom']+" ici.")
+        orientation = GUI.Saisie_Car("Saisir une orientation", directions) if humain else directions[randint(1, len(directions))-1]
         grille = Placer_Bateau(grille, num, coords, orientation, bateaux[num]['taille'])
         if humain:
-            corrige.Afficher_Grille(grille)
+            GUI.Afficher_Grille(grille)
     return grille
 
 # --------------------------
@@ -225,12 +225,12 @@ def Ordi_Coords(grille, bateaux):
 # Sentez-vous libre d'apporter des modifications si cela peut vous aider à trouver les bugs.
 if (__name__ == "__main__"):
     # Test du placement des bateaux par l'ordinateur
-    #corrige.Afficher_Grille(Placer_Bateaux(Partie.Generer_Grille(10), Partie.Generer_Bateaux(), False))
+    #GUI.Afficher_Grille(Placer_Bateaux(Partie.Generer_Grille(10), Partie.Generer_Bateaux(), False))
     #input("Tapez sur Entrée pour continuer.")
 
     # Test du placement des bateaux par le joueur humain
-    corrige.Afficher_Grille(Placer_Bateaux(Partie.Generer_Grille(10), Partie.Generer_Bateaux(), False))
-    corrige.Afficher_Grille(Placer_Bateaux(Partie.Generer_Grille(10), Partie.Generer_Bateaux(), True))
+    GUI.Afficher_Grille(Placer_Bateaux(Partie.Generer_Grille(10), Partie.Generer_Bateaux(), False))
+    GUI.Afficher_Grille(Placer_Bateaux(Partie.Generer_Grille(10), Partie.Generer_Bateaux(), True))
     # Test de la stratégie de tir de l'ordi
     # Un seul joueur qui s'auto cible
     #joueur = Partie.Generer_Joueur(False)
@@ -240,5 +240,5 @@ if (__name__ == "__main__"):
         #tir = Ordi_Coords(joueur['tirs'], joueur['bateaux'])
         #print(tir)
         #corrige.Tir(joueur['grille'], joueur['tirs'], tir, joueur['bateaux'])
-        #corrige.Afficher_Grille(joueur['tirs'])
+        #GUI.Afficher_Grille(joueur['tirs'])
         #input("Tapez sur Entrée pour continuer.") # Pour faire une pause entre les tirs
