@@ -2,13 +2,9 @@ import sys
 import os
 from datetime import datetime
 from enum import IntEnum
+from colorama import Fore, Style
 
-try:
-    from colorama import Fore, Style
-    COLOR_ENABLED = sys.stdout.isatty()
-except ImportError:
-    COLOR_ENABLED = False
-
+COLOR_ENABLED = True
 
 class LogLevel(IntEnum):
     DEBUG = 10
@@ -18,7 +14,7 @@ class LogLevel(IntEnum):
 
 
 class Logger:
-    def __init__(self, level: LogLevel = LogLevel.INFO, stream=sys.stdout):
+    def __init__(self, level: LogLevel = LogLevel.DEBUG, stream=sys.stdout):
         self.level = level
         self.stream = stream
 
@@ -83,3 +79,10 @@ class Logger:
 
     def error(self, *values: object, **kwargs):
         self._log(LogLevel.ERROR, *values, **kwargs)
+
+if __name__ == "__main__":
+    log = Logger(LogLevel.DEBUG)
+    log.debug("debug message")
+    log.info("info message")
+    log.warn("warn message")
+    log.error("error message")

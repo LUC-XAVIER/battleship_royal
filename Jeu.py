@@ -1,14 +1,17 @@
+import random
+
 import BNlib
 import Partie
 import corrige
 import TP5
 import CLI
 import time
-import struct 
+import pickle
+import struct
 import threading
 import socket
 from server import log
-
+from shared import *
 
 host = "127.0.0.1"
 port = 1234
@@ -103,11 +106,20 @@ def run_listener():
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
         s.connect((host, port))
         s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, True)
-        s.settimeout(1)
+        s.settimeout(10)
         sckt = s
         log.info('connected ', sckt)
-        
 
+        send(s, PlayerData("Alex"))
+        data = receive(s)
+
+        client_id = random.randint(0, 20)
+        while True:
+            send(s, data)
+            log.debug('Sending ', data)
+            receive(s)
+            log.debug('Received ', data)
+            time.sleep(1)
 
 if __name__ == "__main__":
     
