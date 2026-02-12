@@ -3,8 +3,9 @@ import random
 import string
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
                              QPushButton, QLabel, QSpinBox, QStackedWidget, QListWidget, 
-                             QLineEdit, QListWidgetItem, QDialog, QRadioButton, QButtonGroup)
-from PyQt6.QtCore import Qt
+                             QLineEdit, QListWidgetItem, QDialog, QRadioButton, QButtonGroup,
+                             QMessageBox)
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPalette, QColor
 
 import Partie
@@ -24,10 +25,11 @@ class GridCell(QPushButton):
     
     def update_style(self):
         styles = {
-            'water': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0d47a1, stop:1 #1565c0); border: 1px solid #1976d2; border-radius: 6px; color: white;',
-            'ship': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2e7d32, stop:1 #43a047); border: 1px solid #4caf50; border-radius: 6px; color: white; font-weight: bold;',
-            'hit': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #c62828, stop:1 #e53935); border: 1px solid #f44336; border-radius: 6px; color: white;',
-            'miss': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #455a64, stop:1 #607d8b); border: 1px solid #78909c; border-radius: 6px; color: white;'
+            'water': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0d47a1, stop:1 #1565c0); border: none; color: white;',
+            'ship': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2e7d32, stop:1 #43a047); border: none; color: white; font-weight: bold;',
+            'hit': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #c62828, stop:1 #e53935); border: none; color: white; font-weight: bold;',
+            'miss': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #9e9e9e, stop:1 #bdbdbd); border: none; color: white;',
+            'sunk': 'background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #000000, stop:1 #212121); border: none; color: white; font-weight: bold;'
         }
         self.setStyleSheet(styles[self.state])
 
@@ -40,12 +42,12 @@ class Grid(QWidget):
     
     def init_grid(self):
         layout = QVBoxLayout()
-        layout.setSpacing(1)
+        layout.setSpacing(0)  # No spacing between rows
         layout.setContentsMargins(10, 10, 10, 10)
         
         for row in range(10):
             row_layout = QHBoxLayout()
-            row_layout.setSpacing(6)
+            row_layout.setSpacing(0)  # No spacing between columns
             
             for col in range(10):
                 cell = GridCell(row, col)
@@ -144,12 +146,25 @@ class OrientationDialog(QDialog):
 class BattleshipGame(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.game_mode = None  # Track current game mode: 'ai', 'lan', 'battle_royale'
+        self.ai_data = None  # Store AI player data for P vs AI mode
+        self.player_turn = True  # Track whose turn it is
         self.init_ui()
+    
+    def keyPressEvent(self, event):
+        """Handle key press events"""
+        if event.key() == Qt.Key.Key_Escape:
+            # ESC key to exit fullscreen/close game
+            self.close()
+        else:
+            super().keyPressEvent(event)
     
     def init_ui(self):
         self.setWindowTitle('Battleship')
-        #self.setGeometry(100, 100, 1200, 700)
+        
+        # Keep window maximized throughout
         self.showMaximized()
+        
         palette = QPalette()
         palette.setColor(QPalette.ColorRole.Window, QColor(15, 20, 30))
         self.setPalette(palette)
@@ -310,40 +325,41 @@ class BattleshipGame(QMainWindow):
     def build_game_page(self):
         page = QWidget()
         main_layout = QVBoxLayout()
-        main_layout.setSpacing(30)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(40, 40, 40, 40)
 
-        controls_layout = QHBoxLayout()
-        controls_layout.setSpacing(10)
-        opponents_label = QLabel('Opponents:')
-        opponents_label.setStyleSheet('color: white; font-size: 14px;')
-        self.opponent_count = QSpinBox()
-        self.opponent_count.setMinimum(1)
-        self.opponent_count.setMaximum(12)
-        self.opponent_count.setValue(3)
-        self.opponent_count.valueChanged.connect(self.rebuild_opponent_grids)
-        controls_layout.addWidget(opponents_label)
-        controls_layout.addWidget(self.opponent_count)
-        controls_layout.addStretch()
+        # Turn indicator
+        self.turn_label = QLabel('Your Turn')
+        self.turn_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.turn_label.setStyleSheet('color: #4caf50; font-size: 20px; font-weight: bold; padding: 15px;')
+        main_layout.addWidget(self.turn_label)
 
-        self.opponents_layout = QHBoxLayout()
-        self.opponents_layout.setSpacing(30)
-
+        # Opponent grids area with proper spacing
+        opponents_container = QWidget()
+        self.opponents_layout = QVBoxLayout()
+        self.opponents_layout.setSpacing(10)
+        self.opponents_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        opponents_container.setLayout(self.opponents_layout)
+        
         self.opponent_grids = []
-        self.rebuild_opponent_grids(self.opponent_count.value())
 
+        # Player grid with proper spacing
         self.player_grid = Grid()
-        self.shoot_all_button = self.create_button('Shoot All', self.shoot_all_grids)
-        self.shoot_all_button.setFixedWidth(140)
-
-        player_layout = QHBoxLayout()
+        
+        player_container = QWidget()
+        player_layout = QVBoxLayout()
         player_layout.setSpacing(10)
+        player_title = QLabel('Your Fleet')
+        player_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        player_title.setStyleSheet('color: #90caf9; font-size: 16px; font-weight: bold; padding: 10px;')
+        player_layout.addWidget(player_title)
         player_layout.addWidget(self.player_grid, alignment=Qt.AlignmentFlag.AlignCenter)
-        player_layout.addWidget(self.shoot_all_button)
+        player_container.setLayout(player_layout)
 
-        main_layout.addLayout(controls_layout)
-        main_layout.addLayout(self.opponents_layout)
-        main_layout.addLayout(player_layout)
+        # Add with stretch to distribute space evenly
+        main_layout.addWidget(opponents_container, stretch=1)
+        main_layout.addStretch(1)
+        main_layout.addWidget(player_container, stretch=1)
 
         page.setLayout(main_layout)
         return page
@@ -407,6 +423,9 @@ class BattleshipGame(QMainWindow):
         return page
 
     def start_ai(self):
+        self.game_mode = 'ai'  # Set game mode to AI
+        # Create AI opponent data
+        self.ai_data = Partie.Generer_Joueur(False, nombre_d_adversaires=1)
         self.init_placement()
         self.previous_page = self.welcome_page
         self.stack.setCurrentWidget(self.placement_page)
@@ -449,18 +468,19 @@ class BattleshipGame(QMainWindow):
         self.previous_page = self.join_room_page
         self.stack.setCurrentWidget(self.placement_page)
 
-    def rebuild_opponent_grids(self, count):
-        for grid in self.opponent_grids:
-            self.opponents_layout.removeWidget(grid)
-            grid.setParent(None)
-        self.opponent_grids = []
-        for _ in range(count):
-            grid = Grid()
-            self.opponent_grids.append(grid)
-            self.opponents_layout.addWidget(grid)
+    # OLD METHODS - Not used in AI mode, kept for future multiplayer modes
+    # def rebuild_opponent_grids(self, count):
+    #     for grid in self.opponent_grids:
+    #         self.opponents_layout.removeWidget(grid)
+    #         grid.setParent(None)
+    #     self.opponent_grids = []
+    #     for _ in range(count):
+    #         grid = Grid()
+    #         self.opponent_grids.append(grid)
+    #         self.opponents_layout.addWidget(grid)
 
-    def shoot_all_grids(self):
-        pass
+    # def shoot_all_grids(self):
+    #     pass
 
     # ---- Ship Placement Methods ----
     def init_placement(self):
@@ -595,16 +615,227 @@ class BattleshipGame(QMainWindow):
 
     def finish_placement(self):
         """All ships placed, proceed to game"""
-        # Update player grid in game page
+        # Update player data with placed grid
+        self.player_data["grille"] = self.placement_model_grid
+        
+        # Setup game based on mode
+        if self.game_mode == 'ai':
+            # Setup for P vs AI mode
+            self.setup_ai_game()
+        else:
+            # Setup for multiplayer modes (to be implemented later)
+            pass
+        
+        self.stack.setCurrentWidget(self.game_page)
+    
+    def setup_ai_game(self):
+        """Setup the game page for P vs AI mode"""
+        # Clear existing opponent grids
+        for grid in self.opponent_grids:
+            self.opponents_layout.removeWidget(grid)
+            grid.setParent(None)
+        self.opponent_grids = []
+        
+        # Add opponent title
+        opponent_title = QLabel('Computer Fleet')
+        opponent_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        opponent_title.setStyleSheet('color: #ef5350; font-size: 14px; font-weight: bold;')
+        
+        # Create single opponent grid for AI
+        ai_grid = Grid()
+        self.opponent_grids.append(ai_grid)
+        
+        # Add grid label container
+        opponent_container = QWidget()
+        opponent_layout = QVBoxLayout()
+        opponent_layout.addWidget(opponent_title)
+        opponent_layout.addWidget(ai_grid)
+        opponent_container.setLayout(opponent_layout)
+        
+        self.opponents_layout.addWidget(opponent_container)
+        
+        # Connect cell clicks for shooting
+        for (row, col), cell in ai_grid.cells.items():
+            cell.clicked.connect(lambda checked=False, r=row, c=col: self.player_shoot(r, c))
+        
+        # Update player grid to show ships
         for r in range(10):
             for c in range(10):
                 v = self.placement_model_grid[r][c]
                 if v >= 2:
                     self.player_grid.cells[(r, c)].state = 'ship'
+                    self.player_grid.cells[(r, c)].ship_index = v - 2
                     self.player_grid.cells[(r, c)].update_style()
         
-        self.stack.setCurrentWidget(self.game_page)
+        # Initialize turn
+        self.player_turn = True
+        self.turn_label.setText('Your Turn - Click on enemy grid to fire!')
+        self.turn_label.setStyleSheet('color: #4caf50; font-size: 18px; font-weight: bold; padding: 10px;')
 
+    
+    def player_shoot(self, row, col):
+        """Handle player shooting at AI grid"""
+        if not self.player_turn:
+            return
+        
+        ai_grid = self.opponent_grids[0]
+        cell = ai_grid.cells[(row, col)]
+        
+        # Check if already shot here
+        if cell.state in ['hit', 'miss', 'sunk']:
+            return
+        
+        # Convert to coords format
+        coords = chr(row + 65) + str(col + 1)
+        
+        # Execute shot using corrige.Tir
+        result = corrige.Tir(
+            self.ai_data["grille"],
+            self.player_data["tirs"][0],
+            coords,
+            self.ai_data["bateaux"]
+        )
+        
+        # Update cell based on result
+        if result == -1:  # Already shot (shouldn't happen with our check above)
+            return
+        elif result == 0:  # Miss
+            cell.state = 'miss'
+            cell.setText('○')
+            cell.update_style()
+            # Switch to AI turn
+            self.player_turn = False
+            self.turn_label.setText('Computer is thinking...')
+            self.turn_label.setStyleSheet('color: #ff9800; font-size: 18px; font-weight: bold; padding: 10px;')
+            QTimer.singleShot(1000, self.computer_turn)
+        elif result == 1:  # Hit
+            cell.state = 'hit'
+            cell.setText('✖')
+            cell.update_style()
+            # Player continues (hits again)
+            self.turn_label.setText('HIT! Your turn again - Click to fire!')
+        elif result == 2:  # Sunk
+            cell.state = 'hit'
+            cell.setText('✖')
+            cell.update_style()
+            # Mark entire ship as sunk
+            self.mark_sunk_ship(ai_grid, self.ai_data["grille"])
+            # Check if player won
+            if corrige.Gagne(self.ai_data["bateaux"]):
+                self.show_win_message("Congratulations! You Win!")
+            else:
+                self.turn_label.setText('SHIP SUNK! Your turn again - Click to fire!')
+    
+    def computer_turn(self):
+        """AI takes a shot"""
+        if self.player_turn:
+            return
+        
+        # Get AI shot coordinates
+        coords = TP5.Ordi_Coords(self.ai_data["tirs"][0], self.player_data["bateaux"])
+        row, col = corrige.Coords2Nums(coords)
+        
+        # Execute shot
+        result = corrige.Tir(
+            self.player_data["grille"],
+            self.ai_data["tirs"][0],
+            coords,
+            self.player_data["bateaux"]
+        )
+        
+        # Update player's grid
+        player_cell = self.player_grid.cells[(row, col)]
+        
+        if result == 0:  # Miss
+            player_cell.state = 'miss'
+            player_cell.setText('○')
+            player_cell.update_style()
+            # Switch back to player turn
+            self.player_turn = True
+            self.turn_label.setText('Computer MISSED! Your turn - Click to fire!')
+            self.turn_label.setStyleSheet('color: #4caf50; font-size: 18px; font-weight: bold; padding: 10px;')
+        elif result == 1:  # Hit
+            player_cell.state = 'hit'
+            player_cell.setText('✖')
+            player_cell.update_style()
+            # AI continues
+            self.turn_label.setText('Computer HIT! Computer shoots again...')
+            QTimer.singleShot(1000, self.computer_turn)
+        elif result == 2:  # Sunk
+            player_cell.state = 'hit'
+            player_cell.setText('✖')
+            player_cell.update_style()
+            # Mark ship as sunk
+            self.mark_sunk_ship(self.player_grid, self.player_data["grille"])
+            # Check if computer won
+            if corrige.Gagne(self.player_data["bateaux"]):
+                self.show_win_message("Computer Wins! Better luck next time.")
+            else:
+                self.turn_label.setText('Computer SUNK YOUR SHIP! Computer shoots again...')
+                QTimer.singleShot(1000, self.computer_turn)
+    
+    def mark_sunk_ship(self, grid, model_grid):
+        """Mark all cells of a sunk ship as black"""
+        # Get the correct bateaux list
+        if grid == self.opponent_grids[0]:
+            bateaux = self.ai_data["bateaux"]
+        else:
+            bateaux = self.player_data["bateaux"]
+        
+        # Check all ships and mark sunk ones
+        for ship_index in range(len(bateaux)):
+            ship = bateaux[ship_index]
+            # If this ship is fully sunk
+            if ship["touchés"] == ship["taille"]:
+                # Mark all cells of this ship as sunk (black)
+                ship_value = ship_index + 2  # Ships are indexed 2-6 in the grid
+                for r in range(10):
+                    for c in range(10):
+                        # Check if this cell contains this ship (positive or negative)
+                        cell_value = model_grid[r][c]
+                        if abs(cell_value) == ship_value:
+                            cell = grid.cells[(r, c)]
+                            cell.state = 'sunk'
+                            cell.setText('■')
+                            cell.update_style()
+                            cell.repaint()  # Force immediate visual update
+    
+    def show_win_message(self, message):
+        """Show win/lose message"""
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Game Over")
+        msg_box.setText(message)
+        msg_box.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        msg_box.setStyleSheet("""
+            QMessageBox {
+                background: #1e1e2e;
+                color: white;
+                min-width: 400px;
+                min-height: 200px;
+            }
+            QMessageBox QLabel {
+                color: white;
+                font-size: 18px;
+                padding: 20px;
+            }
+            QPushButton {
+                background: #2196f3;
+                color: white;
+                padding: 12px 24px;
+                border-radius: 6px;
+                min-width: 100px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #42a5f5;
+            }
+        """)
+        msg_box.exec()
+        # Return to welcome page while maintaining maximized state
+        self.stack.setCurrentWidget(self.welcome_page)
+        self.showMaximized()
+    
     def cancel_placement(self):
         """Cancel placement and return to previous page"""
         prev = getattr(self, 'previous_page', self.welcome_page)
@@ -614,7 +845,6 @@ class BattleshipGame(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     window = BattleshipGame()
-    #window.show()
     window.showMaximized()
     sys.exit(app.exec())
 
